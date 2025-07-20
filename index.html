@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Channel Transcript Scraper</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .progress-bar {
+            transition: width 0.3s ease;
+        }
+        .fade-in {
+            animation: fadeIn 0.5s ease-in;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .spinner {
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <!-- Header -->
+        <div class="text-center mb-8">
+            <h1 class="text-4xl font-bold text-gray-800 mb-2">
+                <i class="fab fa-youtube text-red-600 mr-3"></i>
+                YouTube Channel Transcript Scraper
+            </h1>
+            <p class="text-gray-600">Extract transcripts from all videos in a YouTube channel</p>
+        </div>
+
+        <!-- Main Form -->
+        <div class="max-w-2xl mx-auto bg-white rounded-lg shadow-lg p-6 mb-8">
+            <form id="scrapeForm" class="space-y-4">
+                <div>
+                    <label for="channelUrl" class="block text-sm font-medium text-gray-700 mb-2">
+                        YouTube Channel URL
+                    </label>
+                    <input 
+                        type="url" 
+                        id="channelUrl" 
+                        name="channelUrl" 
+                        placeholder="https://www.youtube.com/@channelname"
+                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        required
+                    >
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="maxVideos" class="block text-sm font-medium text-gray-700 mb-2">
+                            Max Videos (optional)
+                        </label>
+                        <input 
+                            type="number" 
+                            id="maxVideos" 
+                            name="maxVideos" 
+                            placeholder="Leave empty for all videos"
+                            min="1"
+                            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                    </div>
+
+                    <div class="flex items-center pt-6">
+                        <input 
+                            type="checkbox" 
+                            id="includeTimestamps" 
+                            name="includeTimestamps"
+                            class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                        >
+                        <label for="includeTimestamps" class="ml-2 block text-sm text-gray-700">
+                            Include timestamps
+                        </label>
+                    </div>
+                </div>
+
+                <button 
+                    type="submit" 
+                    id="startButton"
+                    class="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-200"
+                >
+                    <i class="fas fa-play mr-2"></i>
+                    Start Scraping
+                </button>
+            </form>
+        </div>
+
+        <!-- Progress Section -->
+        <div id="progressSection" class="max-w-2xl mx-auto bg-white rounded-lg shadow-lg p-6 mb-8 hidden">
+            <h3 class="text-lg font-semibold text-gray-800 mb-4">
+                <i class="fas fa-cog spinner mr-2"></i>
+                Scraping Progress
+            </h3>
+            
+            <div class="mb-4">
+                <div class="flex justify-between text-sm text-gray-600 mb-1">
+                    <span id="progressText">Initializing...</span>
+                    <span id="progressCount">0/0</span>
+                </div>
+                <div class="w-full bg-gray-200 rounded-full h-2">
+                    <div id="progressBar" class="bg-blue-600 h-2 rounded-full progress-bar" style="width: 0%"></div>
+                </div>
+            </div>
+
+            <div id="currentVideo" class="text-sm text-gray-600 bg-gray-50 p-2 rounded">
+                <i class="fas fa-video mr-2"></i>
+                <span>Waiting to start...</span>
+            </div>
+        </div>
+
+        <!-- Results Section -->
+        <div id="resultsSection" class="max-w-4xl mx-auto bg-white rounded-lg shadow-lg p-6 hidden">
+            <h3 class="text-lg font-semibold text-gray-800 mb-4">
+                <i class="fas fa-file-alt mr-2"></i>
+                Transcript Files
+            </h3>
+            
+            <div class="flex justify-between items-center mb-4">
+                <div id="resultsMessage" class="text-sm text-gray-600"></div>
+                <div class="space-x-2">
+                    <button 
+                        id="downloadAllBtn"
+                        class="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition duration-200"
+                    >
+                        <i class="fas fa-download mr-2"></i>
+                        Download All
+                    </button>
+                    <button 
+                        id="clearAllBtn"
+                        class="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 transition duration-200"
+                    >
+                        <i class="fas fa-trash mr-2"></i>
+                        Clear All
+                    </button>
+                </div>
+            </div>
+
+            <div id="transcriptsList" class="space-y-2">
+                <!-- Transcript files will be loaded here -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let progressInterval;
+
+        document.getElementById('scrapeForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const formData = new FormData(e.target);
+            const data = {
+                channel_url: formData.get('channelUrl'),
+                max_videos: formData.get('maxVideos') ? parseInt(formData.get('maxVideos')) : null,
+                include_timestamps: formData.get('includeTimestamps') === 'on'
+            };
+
+            try {
+                const response = await fetch('/api/scrape', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                if (response.ok) {
+                    showProgressSection();
+                    startProgressPolling();
+                } else {
+                    const error = await response.json();
+                    alert('Error: ' + error.error);
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        });
+
+        function showProgressSection() {
+            document.getElementById('progressSection').classList.remove('hidden');
+            document.getElementById('progressSection').classList.add('fade-in');
+            document.getElementById('startButton').disabled = true;
+            document.getElementById('startButton').innerHTML = '<i class="fas fa-spinner spinner mr-2"></i>Scraping...';
+        }
+
+        function hideProgressSection() {
+            document.getElementById('progressSection').classList.add('hidden');
+            document.getElementById('startButton').disabled = false;
+            document.getElementById('startButton').innerHTML = '<i class="fas fa-play mr-2"></i>Start Scraping';
+        }
+
+        function startProgressPolling() {
+            progressInterval = setInterval(async () => {
+                try {
+                    const response = await fetch('/api/progress');
+                    const progress = await response.json();
+                    
+                    updateProgress(progress);
+                    
+                    if (!progress.active) {
+                        clearInterval(progressInterval);
+                        hideProgressSection();
+                        
+                        if (progress.status === 'completed') {
+                            showResults(progress.results);
+                        } else if (progress.status === 'error') {
+                            alert('Error: ' + progress.message);
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error polling progress:', error);
+                }
+            }, 1000);
+        }
+
+        function updateProgress(progress) {
+            const progressBar = document.getElementById('progressBar');
+            const progressText = document.getElementById('progressText');
+            const progressCount = document.getElementById('progressCount');
+            const currentVideo = document.getElementById('currentVideo');
+            
+            const percentage = progress.total > 0 ? (progress.current / progress.total) * 100 : 0;
+            progressBar.style.width = percentage + '%';
+            
+            progressText.textContent = progress.message || 'Processing...';
+            progressCount.textContent = `${progress.current}/${progress.total}`;
+            
+            if (progress.current_video) {
+                currentVideo.innerHTML = `<i class="fas fa-video mr-2"></i>${progress.current_video}`;
+            }
+        }
+
+        function showResults(results) {
+            document.getElementById('resultsSection').classList.remove('hidden');
+            document.getElementById('resultsSection').classList.add('fade-in');
+            document.getElementById('resultsMessage').textContent = results.message;
+            loadTranscripts();
+        }
+
+        async function loadTranscripts() {
+            try {
+                const response = await fetch('/api/transcripts');
+                const transcripts = await response.json();
+                
+                const transcriptsList = document.getElementById('transcriptsList');
+                transcriptsList.innerHTML = '';
+                
+                transcripts.forEach(transcript => {
+                    const div = document.createElement('div');
+                    div.className = 'flex items-center justify-between p-3 bg-gray-50 rounded-md';
+                    div.innerHTML = `
+                        <div class="flex-1">
+                            <div class="font-medium text-gray-800">${transcript.title}</div>
+                            <div class="text-sm text-gray-500">
+                                Size: ${(transcript.size / 1024).toFixed(1)} KB | 
+                                Modified: ${new Date(transcript.modified).toLocaleString()}
+                            </div>
+                        </div>
+                        <div class="space-x-2">
+                            <button 
+                                onclick="viewTranscript('${transcript.filename}')"
+                                class="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700"
+                            >
+                                <i class="fas fa-eye mr-1"></i>View
+                            </button>
+                            <button 
+                                onclick="downloadTranscript('${transcript.filename}')"
+                                class="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700"
+                            >
+                                <i class="fas fa-download mr-1"></i>Download
+                            </button>
+                        </div>
+                    `;
+                    transcriptsList.appendChild(div);
+                });
+            } catch (error) {
+                console.error('Error loading transcripts:', error);
+            }
+        }
+
+        function viewTranscript(filename) {
+            window.open(`/api/transcript/${filename}`, '_blank');
+        }
+
+        function downloadTranscript(filename) {
+            window.open(`/api/download/${filename}`, '_blank');
+        }
+
+        document.getElementById('downloadAllBtn').addEventListener('click', () => {
+            window.open('/api/download-all', '_blank');
+        });
+
+        document.getElementById('clearAllBtn').addEventListener('click', async () => {
+            if (confirm('Are you sure you want to clear all transcripts?')) {
+                try {
+                    const response = await fetch('/api/clear');
+                    if (response.ok) {
+                        loadTranscripts();
+                        alert('All transcripts cleared successfully');
+                    }
+                } catch (error) {
+                    alert('Error clearing transcripts: ' + error.message);
+                }
+            }
+        });
+
+        // Load existing transcripts on page load
+        window.addEventListener('load', loadTranscripts);
+    </script>
+</body>
+</html>
+

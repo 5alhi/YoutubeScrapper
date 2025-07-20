@@ -1,0 +1,50 @@
+{
+  "name": "YouTube Transcript Scraper",
+  "description": "A web application to extract transcripts from YouTube channels",
+  "type": "docker-compose",
+  "docker_compose_location": "docker-compose.yml",
+  "environment_variables": [
+    {
+      "key": "FLASK_ENV",
+      "value": "production",
+      "description": "Flask environment"
+    },
+    {
+      "key": "PYTHONUNBUFFERED",
+      "value": "1",
+      "description": "Python unbuffered output"
+    },
+    {
+      "key": "PORT",
+      "value": "5000",
+      "description": "Application port"
+    }
+  ],
+  "ports": [
+    {
+      "internal": 5000,
+      "external": 80,
+      "protocol": "http"
+    }
+  ],
+  "volumes": [
+    {
+      "name": "transcript_data",
+      "mount_path": "/app/transcripts",
+      "description": "Storage for transcript files"
+    }
+  ],
+  "health_check": {
+    "enabled": true,
+    "path": "/health",
+    "interval": 30,
+    "timeout": 10,
+    "retries": 3
+  },
+  "restart_policy": "unless-stopped",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": "."
+  }
+}
+
